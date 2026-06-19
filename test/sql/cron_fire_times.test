@@ -1,0 +1,235 @@
+# name: test/sql/cron_fire_times.test
+# description: cron_fire_times() table function — cron projection
+# group: [sql]
+
+require-env VGI_TEST_WORKER
+
+# ICU provides the session TimeZone the TIMESTAMPTZ overload fires in. Pin it to
+# UTC so the bulk of the tests are deterministic; DST cases below switch zones.
+require icu
+
+statement ok
+SET TimeZone='UTC';
+
+statement ok
+ATTACH 'crontimes' AS crontimes (TYPE vgi, LOCATION '${VGI_TEST_WORKER}');
+
+# --- count mode (naive TIMESTAMP overload) ---------------------------------
+# Next 3 daily-09:00 fires after midnight. The start (00:00) does not match, so
+# the first fire is the same day at 09:00.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 9 * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 3)
+ORDER BY seq;
+----
+0	2026-06-18 09:00:00
+1	2026-06-19 09:00:00
+2	2026-06-20 09:00:00
+
+# A start that exactly matches the schedule fires once (inclusive of start).
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 9 * * *', TIMESTAMP '2026-06-18 09:00:00', "end" := 2)
+ORDER BY seq;
+----
+0	2026-06-18 09:00:00
+1	2026-06-19 09:00:00
+
+# --- 6-field (seconds) expression ------------------------------------------
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('*/30 * * * * *', TIMESTAMP '2026-06-18 09:00:00', "end" := 3)
+ORDER BY seq;
+----
+0	2026-06-18 09:00:00
+1	2026-06-18 09:00:30
+2	2026-06-18 09:01:00
+
+# --- timestamp upper-bound mode --------------------------------------------
+# Weekday (Mon-Fri) noon within [2026-06-20, 2026-06-24): the 20th is a Saturday
+# and the 21st a Sunday (skipped), so fires land on Mon 22nd and Tue 23rd; the
+# 24th 00:00 bound is exclusive.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times(
+    '0 12 * * 1-5',
+    TIMESTAMP '2026-06-20 00:00:00',
+    "end" := TIMESTAMP '2026-06-24 00:00:00')
+ORDER BY seq;
+----
+0	2026-06-22 12:00:00
+1	2026-06-23 12:00:00
+
+# --- unbounded series, capped with LIMIT -----------------------------------
+query I
+SELECT count(*) FROM (
+  SELECT fire_time
+  FROM crontimes.main.cron_fire_times('*/15 * * * *', TIMESTAMP '2026-06-18 00:00:00')
+  LIMIT 10
+);
+----
+10
+
+# --- TIMESTAMPTZ overload --------------------------------------------------
+# Passing a TIMESTAMPTZ start selects the tz overload; fire_time is TIMESTAMPTZ.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 12 * * *', TIMESTAMPTZ '2026-06-18 00:00:00+00', "end" := 2)
+ORDER BY seq;
+----
+0	2026-06-18 12:00:00+00
+1	2026-06-19 12:00:00+00
+
+# --- multi-batch streaming -------------------------------------------------
+# The producer emits 1024 rows per batch; 2000 every-minute fires span 2 batches.
+# Verify the count, that seq is dense and continuous across the batch boundary
+# (0..1999, no gaps or repeats), and that all fire_times are distinct.
+query IIII
+SELECT count(*), min(seq), max(seq), count(DISTINCT seq)
+FROM crontimes.main.cron_fire_times('* * * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 2000);
+----
+2000	0	1999	2000
+
+query I
+SELECT count(DISTINCT fire_time)
+FROM crontimes.main.cron_fire_times('* * * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 2000);
+----
+2000
+
+# fire_times are strictly ascending: the gap between first and last 2000 minutes
+# apart is exactly 1999 minutes.
+query I
+SELECT date_diff('minute', min(fire_time), max(fire_time))
+FROM crontimes.main.cron_fire_times('* * * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 2000);
+----
+1999
+
+# --- unbounded series terminates at the year-4096 cap ----------------------
+# No count and no upper bound: the producer streams until the year cap stops it.
+# A yearly schedule keeps the row count tractable while still spanning multiple
+# 1024-row batches. From a 2026-06-18 start the first fire is 2027-01-01 and the
+# last is 4095-01-01 (4096-01-01 is at the cap and is dropped):
+# years 2027..4095 inclusive = 2069 rows.
+query III
+SELECT count(*), min(fire_time), max(fire_time)
+FROM crontimes.main.cron_fire_times('0 0 1 1 *', TIMESTAMP '2026-06-18 00:00:00');
+----
+2069	2027-01-01 00:00:00	4095-01-01 00:00:00
+
+# The final occurrence carries the expected seq (0-based: 2069 rows -> last seq 2068).
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 0 1 1 *', TIMESTAMP '2026-06-18 00:00:00')
+ORDER BY seq DESC
+LIMIT 1;
+----
+2068	4095-01-01 00:00:00
+
+# --- count boundaries ------------------------------------------------------
+# end := 0 yields an empty result.
+query I
+SELECT count(*)
+FROM crontimes.main.cron_fire_times('0 9 * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 0);
+----
+0
+
+# --- until boundaries ------------------------------------------------------
+# The upper bound is exclusive: a fire landing exactly on `until` is dropped.
+# 09:00 on the 18th fires (< bound); 09:00 on the 19th equals the bound -> out.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times(
+    '0 9 * * *',
+    TIMESTAMP '2026-06-18 00:00:00',
+    "end" := TIMESTAMP '2026-06-19 09:00:00')
+ORDER BY seq;
+----
+0	2026-06-18 09:00:00
+
+# An `until` at or before `start` yields an empty result.
+query I
+SELECT count(*)
+FROM crontimes.main.cron_fire_times(
+    '0 9 * * *',
+    TIMESTAMP '2026-06-18 00:00:00',
+    "end" := TIMESTAMP '2026-06-17 00:00:00');
+----
+0
+
+# --- 7-field (with seconds + year) expression ------------------------------
+# sec min hour dom month dow year -> 2027-01-01 00:00:00.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 0 0 1 1 * 2027', TIMESTAMP '2026-06-18 00:00:00', "end" := 1)
+ORDER BY seq;
+----
+0	2027-01-01 00:00:00
+
+# --- error handling --------------------------------------------------------
+statement error
+SELECT * FROM crontimes.main.cron_fire_times('not a cron', TIMESTAMP '2026-06-18 00:00:00', "end" := 1);
+----
+invalid cron expression
+
+# A negative count is rejected at bind.
+statement error
+SELECT * FROM crontimes.main.cron_fire_times('0 9 * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := -1);
+----
+must be non-negative
+
+# A non-integer, non-timestamp `end` is rejected.
+statement error
+SELECT * FROM crontimes.main.cron_fire_times('0 9 * * *', TIMESTAMP '2026-06-18 00:00:00', "end" := 'soon');
+----
+must be an integer count or a
+
+# --- DST-aware firing (TIMESTAMPTZ overload uses the session TimeZone) ------
+statement ok
+SET TimeZone='America/New_York';
+
+# Daily noon in America/New_York. DST begins Sun 2026-03-08, so the UTC instant
+# of "noon local" shifts from 17:00Z (EST, UTC-5) to 16:00Z (EDT, UTC-4). Viewing
+# fire_time AT TIME ZONE 'UTC' exposes that one-hour spring-forward shift.
+query II
+SELECT seq, fire_time AT TIME ZONE 'UTC' AS utc_wall
+FROM crontimes.main.cron_fire_times('0 12 * * *', TIMESTAMPTZ '2026-03-06 00:00:00', "end" := 4)
+ORDER BY seq;
+----
+0	2026-03-06 17:00:00
+1	2026-03-07 17:00:00
+2	2026-03-08 16:00:00
+3	2026-03-09 16:00:00
+
+# Same wall-clock cron displayed in the session zone: always 12:00 local, even
+# though the underlying UTC instant moved — that is what DST-aware firing means.
+query I
+SELECT DISTINCT strftime(fire_time, '%H:%M')
+FROM crontimes.main.cron_fire_times('0 12 * * *', TIMESTAMPTZ '2026-03-06 00:00:00', "end" := 4);
+----
+12:00
+
+# Contrast: the naive TIMESTAMP overload ignores the session zone entirely and
+# fires in plain wall-clock — 12:00 with no DST shift regardless of TimeZone.
+query II
+SELECT seq, fire_time
+FROM crontimes.main.cron_fire_times('0 12 * * *', TIMESTAMP '2026-03-06 00:00:00', "end" := 4)
+ORDER BY seq;
+----
+0	2026-03-06 12:00:00
+1	2026-03-07 12:00:00
+2	2026-03-08 12:00:00
+3	2026-03-09 12:00:00
+
+# Fall-back (Sun 2026-11-01): "noon local" shifts the other way, 16:00Z -> 17:00Z.
+query II
+SELECT seq, fire_time AT TIME ZONE 'UTC' AS utc_wall
+FROM crontimes.main.cron_fire_times('0 12 * * *', TIMESTAMPTZ '2026-10-30 00:00:00', "end" := 4)
+ORDER BY seq;
+----
+0	2026-10-30 16:00:00
+1	2026-10-31 16:00:00
+2	2026-11-01 17:00:00
+3	2026-11-02 17:00:00
+
+statement ok
+SET TimeZone='UTC';
