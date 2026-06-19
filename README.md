@@ -1,5 +1,7 @@
 # vgi-crontimes
 
+[![CI](https://github.com/Query-farm/vgi-crontimes/actions/workflows/ci.yml/badge.svg)](https://github.com/Query-farm/vgi-crontimes/actions/workflows/ci.yml)
+
 An example [VGI](https://query.farm) worker: a DuckDB **table function** that projects when a
 cron expression will fire, starting from a given timestamp. Cron math is provided by the
 [`croner`](https://crates.io/crates/croner) crate.

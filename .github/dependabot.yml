@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Rust dependencies (Cargo workspace).
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # arrow-* crates must move in lockstep; update them in one PR.
+      arrow:
+        patterns:
+          - "arrow*"
+      # Batch routine non-major bumps to keep PR noise down.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used in workflows.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

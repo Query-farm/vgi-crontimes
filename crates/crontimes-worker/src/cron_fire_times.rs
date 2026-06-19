@@ -70,7 +70,11 @@ fn build_schema(with_tz: bool) -> SchemaRef {
     let tz = if with_tz { Some(TZ_UTC.into()) } else { None };
     Arc::new(Schema::new(vec![
         Field::new("seq", DataType::Int64, false),
-        Field::new("fire_time", DataType::Timestamp(TimeUnit::Microsecond, tz), false),
+        Field::new(
+            "fire_time",
+            DataType::Timestamp(TimeUnit::Microsecond, tz),
+            false,
+        ),
     ]))
 }
 
@@ -121,8 +125,11 @@ fn read_cron(args: &Arguments) -> Result<Cron> {
     let expr = args
         .const_str(0)
         .ok_or_else(|| err("cron_fire_times: a cron expression is required"))?;
-    crontimes_core::parse_cron(&expr)
-        .map_err(|e| err(format!("cron_fire_times: invalid cron expression '{expr}': {e}")))
+    crontimes_core::parse_cron(&expr).map_err(|e| {
+        err(format!(
+            "cron_fire_times: invalid cron expression '{expr}': {e}"
+        ))
+    })
 }
 
 /// Whether the `start` arg (positional 1) is a TIMESTAMPTZ (`true`) or a naive
@@ -158,7 +165,9 @@ fn resolve_session_tz(settings: &vgi::settings::Settings) -> Option<crontimes_co
     match name.parse::<crontimes_core::Tz>() {
         Ok(tz) => Some(tz),
         Err(_) => {
-            log::warn!("cron_fire_times: session TimeZone '{name}' is not an IANA zone; firing in UTC");
+            log::warn!(
+                "cron_fire_times: session TimeZone '{name}' is not an IANA zone; firing in UTC"
+            );
             None
         }
     }
@@ -343,8 +352,9 @@ impl TableProducer for FireProducer {
             Arc::new(fires.finish())
         };
 
-        let batch = RecordBatch::try_new(self.schema.clone(), vec![Arc::new(seqs.finish()), fire_arr])
-            .map_err(|e| RpcError::runtime_error(e.to_string()))?;
+        let batch =
+            RecordBatch::try_new(self.schema.clone(), vec![Arc::new(seqs.finish()), fire_arr])
+                .map_err(|e| RpcError::runtime_error(e.to_string()))?;
         Ok(Some(batch))
     }
 }

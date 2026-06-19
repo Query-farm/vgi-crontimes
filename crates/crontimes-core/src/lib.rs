@@ -102,7 +102,7 @@ mod tests {
     fn start_between_fires_advances_to_next() {
         let cron = parse_cron("0 9 * * *").unwrap();
         let start = micros(2026, 6, 18, 12, 0, 0); // past 09:00 today
-        // Even inclusive, the next match is tomorrow 09:00.
+                                                   // Even inclusive, the next match is tomorrow 09:00.
         let next = next_fire(&cron, start, true).unwrap();
         assert_eq!(next, micros(2026, 6, 19, 9, 0, 0));
     }
