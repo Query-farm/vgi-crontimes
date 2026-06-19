@@ -5,8 +5,8 @@
 #
 # Prerequisites (one-time):
 #   uv tool install haybarn-unittest      # the DuckDB unittest binary
-#   uv tool install haybarn               # the haybarn runtime
 #   echo "INSTALL vgi FROM community;" | uvx haybarn-cli   # install the vgi ext
+# (`haybarn-cli` and its `haybarn` runtime are fetched on demand by `uvx`.)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

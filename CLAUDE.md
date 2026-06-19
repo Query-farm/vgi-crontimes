@@ -37,8 +37,7 @@ cargo clippy --all-targets        # keep clean
 End-to-end tests need the haybarn tooling (one-time):
 ```sh
 uv tool install haybarn-unittest
-uv tool install haybarn
-echo "INSTALL vgi FROM community;" | uvx haybarn-cli
+echo "INSTALL vgi FROM community;" | uvx haybarn-cli   # haybarn-cli is fetched on demand
 ```
 
 ## The function
