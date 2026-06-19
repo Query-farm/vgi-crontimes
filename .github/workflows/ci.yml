@@ -45,7 +45,7 @@ jobs:
       # haybarn ships the `vgi` community extension; the tests also `require icu`
       # for the DST cases (auto-loaded from the core extension repository).
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
