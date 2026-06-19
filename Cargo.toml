@@ -11,11 +11,11 @@ authors = ["Query Farm LLC <hello@query.farm>"]
 repository = "https://github.com/Query-farm/vgi-crontimes"
 
 [workspace.dependencies]
-# VGI Rust SDK (worker side), from crates.io. Pulls in vgi-rpc 0.2 and arrow 58
+# VGI Rust SDK (worker side), from crates.io. Pulls in vgi-rpc and arrow 58
 # transitively; keep arrow/vgi-rpc versions in lockstep with vgi's pins so a
 # single arrow/vgi-rpc resolves.
-vgi = "0.1.3"
-vgi-rpc = { version = "0.2.0", default-features = false, features = ["macros", "http"] }
+vgi = "0.5.0"
+vgi-rpc = { version = "0.2", default-features = false, features = ["macros", "http"] }
 arrow-array = "58"
 arrow-schema = "58"
 
