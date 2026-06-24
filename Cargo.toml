@@ -16,7 +16,7 @@ repository = "https://github.com/Query-farm/vgi-crontimes"
 # single arrow/vgi-rpc resolves.
 vgi = "0.5.0"
 vgi-rpc = { version = "0.2", default-features = false, features = ["macros", "http"] }
-arrow-array = "58"
+arrow-array = "59"
 arrow-schema = "58"
 
 # Cron projection: croner parses 5/6/7-field expressions and computes occurrences
