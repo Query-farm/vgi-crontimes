@@ -14,7 +14,7 @@ repository = "https://github.com/Query-farm/vgi-crontimes"
 # VGI Rust SDK (worker side), from crates.io. Pulls in vgi-rpc and arrow 58
 # transitively; keep arrow/vgi-rpc versions in lockstep with vgi's pins so a
 # single arrow/vgi-rpc resolves.
-vgi = "0.5.0"
+vgi = "0.9.3"
 vgi-rpc = { version = "0.2", default-features = false, features = ["macros", "http"] }
 arrow-array = "58"
 arrow-schema = "58"
