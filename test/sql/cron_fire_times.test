@@ -8,6 +8,11 @@ require-env VGI_TEST_WORKER
 # UTC so the bulk of the tests are deterministic; DST cases below switch zones.
 require icu
 
+# haybarn-unittest 2.0 runs each test with an isolated home directory, so the
+# vgi extension installed under ~/.haybarn is not visible; install it here.
+statement ok
+INSTALL vgi FROM community;
+
 statement ok
 SET TimeZone='UTC';
 
