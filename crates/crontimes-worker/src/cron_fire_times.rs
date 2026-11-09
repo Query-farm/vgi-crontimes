@@ -357,4 +357,8 @@ impl TableProducer for FireProducer {
                 .map_err(|e| RpcError::runtime_error(e.to_string()))?;
         Ok(Some(batch))
     }
+
+    // Resumable over HTTP: the cron, schema, zone and bounds are rebuilt from
+    // the params by `producer`; only the schedule position has to travel.
+    vgi::resume_fields!(cursor, inclusive, seq, remaining, batch_size, done);
 }

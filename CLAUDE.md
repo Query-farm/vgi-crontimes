@@ -23,7 +23,7 @@ rather than hand-rolled.
   calls `Worker::run()`; `cron_fire_times.rs` holds the `TableFunction` impl + streaming producer.
 - `test/sql/*.test` — SQLLogic tests run via the haybarn unittest runner (also in CI).
 - `.github/` — `workflows/ci.yml` (fmt, clippy, unit tests, haybarn SQLLogic) and Dependabot.
-- Depends on the published `vgi` SDK from crates.io (pulls in `vgi-rpc` 0.2 and arrow 58).
+- Depends on the published `vgi` SDK from crates.io (pulls in `vgi-rpc` 0.32 and arrow 59).
 
 ## Build & test
 
